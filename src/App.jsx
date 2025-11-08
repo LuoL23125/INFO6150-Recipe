@@ -13,6 +13,8 @@ import RecipeDetailsPage from './pages/RecipeDetailsPage';
 import ProfilePage from './pages/ProfilePage';
 import FavoritesPage from './pages/FavoritesPage';
 import DashboardPage from './pages/DashboardPage';
+import AddRecipePage from './pages/AddRecipePage';
+import EditRecipePage from './pages/EditRecipePage';
 import NotFoundPage from './pages/NotFoundPage';
 
 import './App.css';
@@ -47,6 +49,8 @@ function App() {
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/favorites" element={<FavoritesPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/add-recipe" element={<AddRecipePage />} />
+              <Route path="/edit-recipe/:id" element={<EditRecipePage />} />
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
           </Box>

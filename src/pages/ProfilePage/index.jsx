@@ -43,9 +43,11 @@ import {
   Email,
   DateRange,
   FavoriteBorder,
-  Visibility
+  Visibility,
+  Add
 } from '@mui/icons-material';
 import authService from '../../services/authService';
+import customRecipeService from '../../services/customRecipeService';
 
 const ProfilePage = () => {
   const navigate = useNavigate();
@@ -70,6 +72,7 @@ const ProfilePage = () => {
     setLoading(true);
     try {
       const currentUser = authService.getCurrentUser();
+      console.log('Current user:', currentUser); // 调试日志
       
       if (!currentUser) {
         navigate('/login');
@@ -83,12 +86,16 @@ const ProfilePage = () => {
         email: currentUser.email
       });
 
+      // 使用正确的用户ID
+      const userId = currentUser.id;
+      console.log('Using userId for queries:', userId, 'Type:', typeof userId); // 调试日志
+
       // Load user's favorites
-      await loadFavorites(currentUser.id);
+      await loadFavorites(userId);
       // Load user's meal plans
-      await loadMealPlans(currentUser.id);
+      await loadMealPlans(userId);
       // Load user's custom recipes
-      await loadCustomRecipes(currentUser.id);
+      await loadCustomRecipes(userId);
 
     } catch (err) {
       setError('Failed to load profile data');
@@ -124,11 +131,12 @@ const ProfilePage = () => {
 
   const loadCustomRecipes = async (userId) => {
     try {
-      const response = await fetch(`http://localhost:3001/customRecipes?userId=${userId}`);
-      if (response.ok) {
-        const data = await response.json();
-        setCustomRecipes(data);
-      }
+      console.log('Loading custom recipes for userId:', userId, 'Type:', typeof userId); // 调试日志
+      
+      // 使用 customRecipeService 来加载食谱
+      const recipes = await customRecipeService.getUserRecipes(userId);
+      console.log('Custom recipes loaded:', recipes); // 调试日志
+      setCustomRecipes(recipes);
     } catch (err) {
       console.error('Error loading custom recipes:', err);
     }
@@ -203,14 +211,14 @@ const ProfilePage = () => {
 
   const removeCustomRecipe = async (recipeId) => {
     try {
-      const response = await fetch(`http://localhost:3001/customRecipes/${recipeId}`, {
-        method: 'DELETE'
-      });
+      const result = await customRecipeService.deleteRecipe(recipeId, user.id);
       
-      if (response.ok) {
+      if (result.success) {
         setCustomRecipes(customRecipes.filter(r => r.id !== recipeId));
         setSuccessMessage('Custom recipe deleted');
         setTimeout(() => setSuccessMessage(''), 3000);
+      } else {
+        setError(result.message);
       }
     } catch (err) {
       setError('Failed to delete custom recipe');
@@ -570,6 +578,19 @@ const ProfilePage = () => {
           {/* Custom Recipes Tab */}
           {tabValue === 2 && (
             <Grid container spacing={3}>
+              {/* Add Recipe Button - 添加在顶部 */}
+              <Grid item xs={12}>
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+                  <Button
+                    variant="contained"
+                    startIcon={<Add />}
+                    onClick={() => navigate('/add-recipe')}
+                  >
+                    Add New Recipe
+                  </Button>
+                </Box>
+              </Grid>
+              
               {customRecipes.length > 0 ? (
                 customRecipes.map((recipe) => (
                   <Grid item xs={12} sm={6} md={4} key={recipe.id}>
@@ -584,22 +605,53 @@ const ProfilePage = () => {
                         <Typography variant="h6" gutterBottom noWrap>
                           {recipe.title}
                         </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {recipe.ingredients?.substring(0, 100)}...
+                        <Typography variant="body2" color="text.secondary" noWrap>
+                          {recipe.description || 'No description'}
                         </Typography>
+                        {recipe.tags && recipe.tags.length > 0 && (
+                          <Box sx={{ mt: 1, display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                            {recipe.tags.slice(0, 3).map((tag) => (
+                              <Chip
+                                key={tag}
+                                label={tag}
+                                size="small"
+                                variant="outlined"
+                              />
+                            ))}
+                          </Box>
+                        )}
+                        <Box sx={{ mt: 1, display: 'flex', gap: 1 }}>
+                          {recipe.prepTime && (
+                            <Chip
+                              icon={<AccessTime />}
+                              label={`${recipe.prepTime} min prep`}
+                              size="small"
+                            />
+                          )}
+                          {recipe.difficulty && (
+                            <Chip
+                              label={recipe.difficulty}
+                              size="small"
+                              color={
+                                recipe.difficulty === 'easy' ? 'success' :
+                                recipe.difficulty === 'hard' ? 'error' : 'warning'
+                              }
+                            />
+                          )}
+                        </Box>
                       </CardContent>
                       <CardActions>
                         <Button
                           size="small"
                           startIcon={<Visibility />}
-                          onClick={() => console.log('View custom recipe:', recipe.id)}
+                          onClick={() => navigate(`/recipe/custom-${recipe.id}`)}
                         >
                           View
                         </Button>
                         <Button
                           size="small"
                           startIcon={<Edit />}
-                          onClick={() => console.log('Edit custom recipe:', recipe.id)}
+                          onClick={() => navigate(`/edit-recipe/${recipe.id}`)}
                         >
                           Edit
                         </Button>
@@ -628,9 +680,10 @@ const ProfilePage = () => {
                     <Button
                       variant="contained"
                       sx={{ mt: 3 }}
-                      onClick={() => console.log('Add custom recipe')}
+                      onClick={() => navigate('/add-recipe')}
+                      startIcon={<Add />}
                     >
-                      Add Recipe
+                      Add Your First Recipe
                     </Button>
                   </Box>
                 </Grid>

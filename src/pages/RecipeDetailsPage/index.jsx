@@ -11,7 +11,6 @@ import {
   ListItem,
   ListItemText,
   ListItemIcon,
-  Divider,
   Button,
   CircularProgress,
   Alert,
@@ -44,9 +43,10 @@ import {
 import { recipeAPI, isAPIConfigured } from '../../utils/api';
 import authService from '../../services/authService';
 import favoritesService from '../../services/favoritesService';
+import customRecipeService from '../../services/customRecipeService';
 
 const RecipeDetailsPage = () => {
-  const { id } = useParams();
+  const { id } = useParams();               // 可能是 "716429" 或 "custom-1762609773179"
   const navigate = useNavigate();
   const [recipe, setRecipe] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -57,9 +57,12 @@ const RecipeDetailsPage = () => {
   const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [user, setUser] = useState(null);
 
+  const isCustomRecipe = id.startsWith('custom-');
+
   useEffect(() => {
     loadRecipeDetails();
     checkUserAndFavorite();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const checkUserAndFavorite = async () => {
@@ -67,7 +70,7 @@ const RecipeDetailsPage = () => {
     setUser(currentUser);
     
     if (currentUser) {
-      // Check if recipe is favorited
+      // 这里依然用 id 作为 key（包括 custom- 的情况）
       const favorited = await favoritesService.isFavorited(currentUser.id, id);
       setIsFavorited(!!favorited);
     }
@@ -76,18 +79,43 @@ const RecipeDetailsPage = () => {
   const loadRecipeDetails = async () => {
     setLoading(true);
     setError(null);
+
     try {
-      if (isAPIConfigured()) {
-        const data = await recipeAPI.getRecipeById(id);
-        setRecipe(data);
+      // ✅ 情况 1：自定义食谱 /recipe/custom-<id>
+      if (isCustomRecipe) {
+        const realId = id.replace('custom-', '');
+        console.log('Loading custom recipe with id:', realId);
+
+        const data = await customRecipeService.getRecipeById(realId);
+
+        if (!data) {
+          setError('Custom recipe not found');
+          setRecipe(null);
+        } else {
+          setRecipe(data);
+        }
       } else {
-        // Use mock data if API is not configured
-        setRecipe(mockData.randomRecipe);
-        setError('Using demo data. Configure your Spoonacular API key for real recipe details.');
+        // ✅ 情况 2：普通 API 食谱
+        if (isAPIConfigured()) {
+          const data = await recipeAPI.getRecipeById(id);
+          setRecipe(data);
+        } else {
+          // 使用 demo 数据
+          setRecipe(mockData.randomRecipe);
+          setError('Using demo data. Configure your Spoonacular API key for real recipe details.');
+        }
       }
     } catch (err) {
+      console.error('Error loading recipe details:', err);
       setError('Failed to load recipe details');
-      setRecipe(mockData.randomRecipe);
+
+      if (!isCustomRecipe) {
+        // 普通菜谱失败时 fallback 到 mock
+        setRecipe(mockData.randomRecipe);
+      } else {
+        // 自定义菜谱失败就认为没找到
+        setRecipe(null);
+      }
     } finally {
       setLoading(false);
     }
@@ -100,8 +128,8 @@ const RecipeDetailsPage = () => {
   const handleShare = () => {
     if (navigator.share) {
       navigator.share({
-        title: recipe.title,
-        text: `Check out this recipe: ${recipe.title}`,
+        title: recipe?.title,
+        text: `Check out this recipe: ${recipe?.title}`,
         url: window.location.href
       });
     } else {
@@ -121,7 +149,6 @@ const RecipeDetailsPage = () => {
       const result = await favoritesService.toggleFavorite(user.id, recipe);
       if (result.success) {
         setIsFavorited(!isFavorited);
-        // Show success message
         if (!isFavorited) {
           alert('Recipe added to favorites!');
         } else {
@@ -136,6 +163,13 @@ const RecipeDetailsPage = () => {
     } finally {
       setFavoriteLoading(false);
     }
+  };
+
+  const getNutrientValue = (name) => {
+    const nutrient = recipe?.nutrition?.nutrients?.find(n => 
+      n.name.toLowerCase() === name.toLowerCase()
+    );
+    return nutrient ? `${Math.round(nutrient.amount)}${nutrient.unit}` : 'N/A';
   };
 
   if (loading) {
@@ -161,11 +195,189 @@ const RecipeDetailsPage = () => {
     );
   }
 
-  const getNutrientValue = (name) => {
-    const nutrient = recipe.nutrition?.nutrients?.find(n => 
-      n.name.toLowerCase() === name.toLowerCase()
+  const handleTabChange = (e, newValue) => {
+    setTabValue(newValue);
+  };
+
+  // 自定义菜谱的时间信息：db.json 里有 prepTime / cookTime / totalTime
+  const renderTimeChips = () => {
+    // Spoonacular：readyInMinutes + servings
+    if (!isCustomRecipe) {
+      return (
+        <>
+          {recipe.readyInMinutes && (
+            <Chip
+              icon={<AccessTime />}
+              label={`${recipe.readyInMinutes} min`}
+              variant="outlined"
+            />
+          )}
+          {recipe.servings && (
+            <Chip
+              icon={<Restaurant />}
+              label={`${recipe.servings} servings`}
+              variant="outlined"
+            />
+          )}
+        </>
+      );
+    }
+
+    // 自定义：用 prepTime / cookTime / totalTime
+    return (
+      <>
+        {recipe.prepTime && (
+          <Chip
+            icon={<AccessTime />}
+            label={`Prep: ${recipe.prepTime} min`}
+            variant="outlined"
+          />
+        )}
+        {recipe.cookTime && (
+          <Chip
+            icon={<AccessTime />}
+            label={`Cook: ${recipe.cookTime} min`}
+            variant="outlined"
+          />
+        )}
+        {recipe.totalTime && (
+          <Chip
+            icon={<AccessTime />}
+            label={`Total: ${recipe.totalTime} min`}
+            variant="outlined"
+          />
+        )}
+        {recipe.servings && (
+          <Chip
+            icon={<Restaurant />}
+            label={`${recipe.servings} servings`}
+            variant="outlined"
+          />
+        )}
+      </>
     );
-    return nutrient ? `${Math.round(nutrient.amount)}${nutrient.unit}` : 'N/A';
+  };
+
+  // 渲染 Instructions：既支持 Spoonacular 的 string / analyzedInstructions，也支持你自定义的数组
+  const renderInstructionsContent = () => {
+    // 自定义食谱：db.json 里的 instructions 是字符串数组
+    if (Array.isArray(recipe.instructions)) {
+      if (recipe.instructions.length === 0) {
+        return (
+          <Alert severity="info">
+            No instructions available for this recipe.
+          </Alert>
+        );
+      }
+
+      return (
+        <Stepper orientation="vertical" activeStep={-1}>
+          {recipe.instructions.map((stepText, index) => (
+            <Step key={index} expanded>
+              <StepLabel>
+                <Typography variant="subtitle1" fontWeight="bold">
+                  Step {index + 1}
+                </Typography>
+              </StepLabel>
+              <StepContent>
+                <Typography variant="body1" sx={{ mb: 2 }}>
+                  {stepText}
+                </Typography>
+              </StepContent>
+            </Step>
+          ))}
+        </Stepper>
+      );
+    }
+
+    // Spoonacular：有 analyzedInstructions 时
+    if (
+      recipe.instructions &&
+      recipe.analyzedInstructions &&
+      recipe.analyzedInstructions.length > 0 &&
+      recipe.analyzedInstructions[0].steps &&
+      recipe.analyzedInstructions[0].steps.length > 0
+    ) {
+      return (
+        <Stepper orientation="vertical" activeStep={-1}>
+          {recipe.analyzedInstructions[0].steps.map((step) => (
+            <Step key={step.number} expanded>
+              <StepLabel>
+                <Typography variant="subtitle1" fontWeight="bold">
+                  Step {step.number}
+                </Typography>
+              </StepLabel>
+              <StepContent>
+                <Typography variant="body1" sx={{ mb: 2 }}>
+                  {step.step}
+                </Typography>
+              </StepContent>
+            </Step>
+          ))}
+        </Stepper>
+      );
+    }
+
+    // Spoonacular：只给了 instructions（HTML / 纯文本）
+    if (recipe.instructions) {
+      return (
+        <Box 
+          sx={{
+            '& ol': {
+              paddingLeft: 0,
+              listStyle: 'none',
+              counterReset: 'step-counter',
+              '& li': {
+                position: 'relative',
+                marginBottom: 3,
+                paddingLeft: 6,
+                fontSize: '1rem',
+                lineHeight: 1.8,
+                counterIncrement: 'step-counter',
+                '&:before': {
+                  content: 'counter(step-counter)',
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  backgroundColor: 'primary.main',
+                  color: 'white',
+                  width: 32,
+                  height: 32,
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 'bold',
+                  fontSize: '0.9rem'
+                }
+              }
+            },
+            '& ul': {
+              paddingLeft: 3,
+              '& li': {
+                marginBottom: 1.5,
+                fontSize: '1rem',
+                lineHeight: 1.6
+              }
+            },
+            '& p': {
+              marginBottom: 2,
+              fontSize: '1rem',
+              lineHeight: 1.6
+            }
+          }}
+          dangerouslySetInnerHTML={{ 
+            __html: recipe.instructions 
+          }}
+        />
+      );
+    }
+
+    return (
+      <Alert severity="info">
+        No instructions available for this recipe.
+      </Alert>
+    );
   };
 
   return (
@@ -240,25 +452,12 @@ const RecipeDetailsPage = () => {
               </Box>
               
               <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                {recipe.readyInMinutes && (
-                  <Chip
-                    icon={<AccessTime />}
-                    label={`${recipe.readyInMinutes} min`}
-                    variant="outlined"
-                  />
-                )}
-                {recipe.servings && (
-                  <Chip
-                    icon={<Restaurant />}
-                    label={`${recipe.servings} servings`}
-                    variant="outlined"
-                  />
-                )}
+                {renderTimeChips()}
               </Box>
             </Box>
           </Paper>
 
-          {/* Nutrition Summary Card */}
+          {/* Nutrition Summary Card（自定义菜谱一般没有 nutrition，这里会显示 N/A） */}
           <Card sx={{ mt: 2 }}>
             <CardContent>
               <Typography variant="h6" gutterBottom>
@@ -328,6 +527,7 @@ const RecipeDetailsPage = () => {
             {recipe.title}
           </Typography>
 
+          {/* Spoonacular 的 summary（HTML），自定义菜谱一般没有 */}
           {recipe.summary && (
             <Typography 
               variant="body1" 
@@ -340,7 +540,7 @@ const RecipeDetailsPage = () => {
           <Paper sx={{ mt: 3 }}>
             <Tabs
               value={tabValue}
-              onChange={(e, newValue) => setTabValue(newValue)}
+              onChange={handleTabChange}
               sx={{ borderBottom: 1, borderColor: 'divider' }}
             >
               <Tab label="Ingredients" />
@@ -354,6 +554,8 @@ const RecipeDetailsPage = () => {
                 <Typography variant="h6" gutterBottom sx={{ mb: 3 }}>
                   Ingredients List
                 </Typography>
+
+                {/* Spoonacular 的 extendedIngredients */}
                 {recipe.extendedIngredients && recipe.extendedIngredients.length > 0 ? (
                   <List>
                     {recipe.extendedIngredients.map((ingredient, index) => (
@@ -376,6 +578,28 @@ const RecipeDetailsPage = () => {
                       </ListItem>
                     ))}
                   </List>
+                ) : recipe.ingredients && recipe.ingredients.length > 0 ? (
+                  // 自定义食谱：字符串数组 ['400g spaghetti', ...]
+                  <List>
+                    {recipe.ingredients.map((ing, index) => (
+                      <ListItem 
+                        key={index}
+                        sx={{ 
+                          py: 1.5,
+                          borderBottom: index < recipe.ingredients.length - 1 ? '1px solid' : 'none',
+                          borderColor: 'divider'
+                        }}
+                      >
+                        <ListItemIcon>
+                          <CheckCircle color="primary" />
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={ing}
+                          primaryTypographyProps={{ variant: 'body1' }}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
                 ) : (
                   <Alert severity="info">
                     No ingredients information available for this recipe.
@@ -390,84 +614,7 @@ const RecipeDetailsPage = () => {
                 <Typography variant="h6" gutterBottom sx={{ mb: 3 }}>
                   Cooking Instructions
                 </Typography>
-                {recipe.instructions ? (
-                  // Check if analyzedInstructions exists and has steps
-                  recipe.analyzedInstructions && recipe.analyzedInstructions.length > 0 && 
-                  recipe.analyzedInstructions[0].steps && recipe.analyzedInstructions[0].steps.length > 0 ? (
-                    // Use Stepper for analyzedInstructions
-                    <Stepper orientation="vertical" activeStep={-1}>
-                      {recipe.analyzedInstructions[0].steps.map((step, index) => (
-                        <Step key={step.number} expanded={true}>
-                          <StepLabel>
-                            <Typography variant="subtitle1" fontWeight="bold">
-                              Step {step.number}
-                            </Typography>
-                          </StepLabel>
-                          <StepContent>
-                            <Typography variant="body1" sx={{ mb: 2 }}>
-                              {step.step}
-                            </Typography>
-                          </StepContent>
-                        </Step>
-                      ))}
-                    </Stepper>
-                  ) : (
-                    // If instructions is HTML string, render it with custom styling
-                    <Box 
-                      sx={{
-                        '& ol': {
-                          paddingLeft: 0,
-                          listStyle: 'none',
-                          counterReset: 'step-counter',
-                          '& li': {
-                            position: 'relative',
-                            marginBottom: 3,
-                            paddingLeft: 6,
-                            fontSize: '1rem',
-                            lineHeight: 1.8,
-                            counterIncrement: 'step-counter',
-                            '&:before': {
-                              content: 'counter(step-counter)',
-                              position: 'absolute',
-                              left: 0,
-                              top: 0,
-                              backgroundColor: 'primary.main',
-                              color: 'white',
-                              width: 32,
-                              height: 32,
-                              borderRadius: '50%',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontWeight: 'bold',
-                              fontSize: '0.9rem'
-                            }
-                          }
-                        },
-                        '& ul': {
-                          paddingLeft: 3,
-                          '& li': {
-                            marginBottom: 1.5,
-                            fontSize: '1rem',
-                            lineHeight: 1.6
-                          }
-                        },
-                        '& p': {
-                          marginBottom: 2,
-                          fontSize: '1rem',
-                          lineHeight: 1.6
-                        }
-                      }}
-                      dangerouslySetInnerHTML={{ 
-                        __html: recipe.instructions 
-                      }}
-                    />
-                  )
-                ) : (
-                  <Alert severity="info">
-                    No instructions available for this recipe.
-                  </Alert>
-                )}
+                {renderInstructionsContent()}
               </Box>
             )}
 
