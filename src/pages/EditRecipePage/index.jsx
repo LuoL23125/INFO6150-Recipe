@@ -29,20 +29,19 @@ import {
   AccessTime,
   ArrowBack,
   PhotoCamera,
-  Edit
+  Edit as EditIcon
 } from '@mui/icons-material';
 import authService from '../../services/authService';
 import customRecipeService from '../../services/customRecipeService';
 
 const EditRecipePage = () => {
-  const { id } = useParams();
+  const { id } = useParams(); // 这里的 id 是纯数字字符串，如 "1762609773179"
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  // Form state
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -64,7 +63,6 @@ const EditRecipePage = () => {
   const [tagInput, setTagInput] = useState('');
   const [formErrors, setFormErrors] = useState({});
 
-  // Categories and difficulties
   const categories = [
     { value: 'appetizer', label: 'Appetizer' },
     { value: 'main', label: 'Main Course' },
@@ -82,14 +80,25 @@ const EditRecipePage = () => {
   ];
 
   const cuisines = [
-    'Italian', 'Chinese', 'Mexican', 'Indian', 'Japanese',
-    'Thai', 'French', 'Greek', 'Spanish', 'American',
-    'Mediterranean', 'Korean', 'Vietnamese', 'Other'
+    'Italian',
+    'Chinese',
+    'Mexican',
+    'Indian',
+    'Japanese',
+    'Thai',
+    'French',
+    'Greek',
+    'Spanish',
+    'American',
+    'Mediterranean',
+    'Korean',
+    'Vietnamese',
+    'Other'
   ];
 
-  // Load recipe data
   useEffect(() => {
     loadRecipe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const loadRecipe = async () => {
@@ -102,21 +111,20 @@ const EditRecipePage = () => {
       }
 
       const recipe = await customRecipeService.getRecipeById(id);
-      
+
       if (!recipe) {
         setError('Recipe not found');
         setTimeout(() => navigate('/profile'), 2000);
         return;
       }
 
-      // Check if user owns this recipe
-      if (recipe.userId !== user.id) {
+      // 这里用字符串比较，避免 "1" !== 1
+      if (String(recipe.userId) !== String(user.id)) {
         setError('You are not authorized to edit this recipe');
         setTimeout(() => navigate('/profile'), 2000);
         return;
       }
 
-      // Populate form with recipe data
       setFormData({
         title: recipe.title || '',
         description: recipe.description || '',
@@ -124,17 +132,16 @@ const EditRecipePage = () => {
         servings: recipe.servings || 4,
         prepTime: recipe.prepTime || 15,
         cookTime: recipe.cookTime || 30,
-        totalTime: recipe.totalTime || 45,
+        totalTime: recipe.totalTime || recipe.prepTime + recipe.cookTime || 45,
         difficulty: recipe.difficulty || 'medium',
         cuisine: recipe.cuisine || '',
         category: recipe.category || 'main',
-        ingredients: recipe.ingredients || [''],
-        instructions: recipe.instructions || [''],
+        ingredients: recipe.ingredients && recipe.ingredients.length > 0 ? recipe.ingredients : [''],
+        instructions: recipe.instructions && recipe.instructions.length > 0 ? recipe.instructions : [''],
         tags: recipe.tags || [],
-        isPublic: recipe.isPublic || false,
+        isPublic: !!recipe.isPublic,
         notes: recipe.notes || ''
       });
-
     } catch (err) {
       console.error('Error loading recipe:', err);
       setError('Failed to load recipe');
@@ -143,88 +150,82 @@ const EditRecipePage = () => {
     }
   };
 
-  // Handle input changes
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData({
-      ...formData,
+    setFormData((prev) => ({
+      ...prev,
       [name]: type === 'checkbox' ? checked : value
-    });
+    }));
 
-    // Clear error for this field
     if (formErrors[name]) {
       setFormErrors({ ...formErrors, [name]: '' });
     }
   };
 
-  // Handle number inputs
   const handleNumberChange = (name, value) => {
-    const numValue = parseInt(value) || 0;
-    setFormData({
-      ...formData,
-      [name]: numValue
+    const numValue = parseInt(value, 10) || 0;
+    setFormData((prev) => {
+      const updated = { ...prev, [name]: numValue };
+      if (name === 'prepTime' || name === 'cookTime') {
+        const prep = name === 'prepTime' ? numValue : prev.prepTime;
+        const cook = name === 'cookTime' ? numValue : prev.cookTime;
+        updated.totalTime = prep + cook;
+      }
+      return updated;
     });
-
-    // Update total time if prep or cook time changes
-    if (name === 'prepTime' || name === 'cookTime') {
-      const prep = name === 'prepTime' ? numValue : formData.prepTime;
-      const cook = name === 'cookTime' ? numValue : formData.cookTime;
-      setFormData(prev => ({
-        ...prev,
-        [name]: numValue,
-        totalTime: prep + cook
-      }));
-    }
   };
 
-  // Handle ingredient changes
   const handleIngredientChange = (index, value) => {
     const newIngredients = [...formData.ingredients];
     newIngredients[index] = value;
-    setFormData({ ...formData, ingredients: newIngredients });
+    setFormData((prev) => ({ ...prev, ingredients: newIngredients }));
   };
 
   const addIngredient = () => {
-    setFormData({ ...formData, ingredients: [...formData.ingredients, ''] });
+    setFormData((prev) => ({
+      ...prev,
+      ingredients: [...prev.ingredients, '']
+    }));
   };
 
   const removeIngredient = (index) => {
     const newIngredients = formData.ingredients.filter((_, i) => i !== index);
-    setFormData({ ...formData, ingredients: newIngredients });
+    setFormData((prev) => ({ ...prev, ingredients: newIngredients }));
   };
 
-  // Handle instruction changes
   const handleInstructionChange = (index, value) => {
     const newInstructions = [...formData.instructions];
     newInstructions[index] = value;
-    setFormData({ ...formData, instructions: newInstructions });
+    setFormData((prev) => ({ ...prev, instructions: newInstructions }));
   };
 
   const addInstruction = () => {
-    setFormData({ ...formData, instructions: [...formData.instructions, ''] });
+    setFormData((prev) => ({
+      ...prev,
+      instructions: [...prev.instructions, '']
+    }));
   };
 
   const removeInstruction = (index) => {
     const newInstructions = formData.instructions.filter((_, i) => i !== index);
-    setFormData({ ...formData, instructions: newInstructions });
+    setFormData((prev) => ({ ...prev, instructions: newInstructions }));
   };
 
-  // Handle tags
   const handleAddTag = () => {
     if (tagInput.trim() && !formData.tags.includes(tagInput.trim())) {
-      setFormData({
-        ...formData,
-        tags: [...formData.tags, tagInput.trim()]
-      });
+      setFormData((prev) => ({
+        ...prev,
+        tags: [...prev.tags, tagInput.trim()]
+      }));
       setTagInput('');
     }
   };
 
   const handleRemoveTag = (tagToRemove) => {
-    setFormData({
-      ...formData,
-      tags: formData.tags.filter(tag => tag !== tagToRemove)
-    });
+    setFormData((prev) => ({
+      ...prev,
+      tags: prev.tags.filter((tag) => tag !== tagToRemove)
+    }));
   };
 
   const handleTagKeyPress = (e) => {
@@ -234,7 +235,6 @@ const EditRecipePage = () => {
     }
   };
 
-  // Validate form
   const validateForm = () => {
     const errors = {};
 
@@ -246,12 +246,12 @@ const EditRecipePage = () => {
       errors.description = 'Description is required';
     }
 
-    const validIngredients = formData.ingredients.filter(i => i.trim());
+    const validIngredients = formData.ingredients.filter((i) => i.trim());
     if (validIngredients.length === 0) {
       errors.ingredients = 'At least one ingredient is required';
     }
 
-    const validInstructions = formData.instructions.filter(i => i.trim());
+    const validInstructions = formData.instructions.filter((i) => i.trim());
     if (validInstructions.length === 0) {
       errors.instructions = 'At least one instruction step is required';
     }
@@ -260,7 +260,6 @@ const EditRecipePage = () => {
     return Object.keys(errors).length === 0;
   };
 
-  // Handle form submission
   const handleSubmit = async () => {
     if (!validateForm()) {
       setError('Please fill in all required fields');
@@ -272,20 +271,28 @@ const EditRecipePage = () => {
 
     try {
       const user = authService.getCurrentUser();
-      
-      // Clean up empty ingredients and instructions
+      if (!user) {
+        setError('Please login first');
+        return;
+      }
+
       const cleanedData = {
         ...formData,
-        ingredients: formData.ingredients.filter(i => i.trim()),
-        instructions: formData.instructions.filter(i => i.trim()),
-        // If no image URL provided, use a placeholder
-        image: formData.image || `https://via.placeholder.com/556x370?text=${encodeURIComponent(formData.title)}`
+        ingredients: formData.ingredients.filter((i) => i.trim()),
+        instructions: formData.instructions.filter((i) => i.trim()),
+        image:
+          formData.image ||
+          'https://via.placeholder.com/600x400?text=Custom+Recipe'
       };
 
-      const result = await customRecipeService.updateRecipe(id, user.id, cleanedData);
+      const result = await customRecipeService.updateRecipe(
+        id,
+        user.id,
+        cleanedData
+      );
 
       if (result.success) {
-        setSuccess('Recipe updated successfully! Redirecting...');
+        setSuccess('Recipe updated successfully! Redirecting.');
         setTimeout(() => {
           navigate('/profile');
         }, 2000);
@@ -320,7 +327,7 @@ const EditRecipePage = () => {
 
       <Paper sx={{ p: 4 }}>
         <Typography variant="h4" gutterBottom sx={{ mb: 3 }}>
-          <Edit sx={{ mr: 1, verticalAlign: 'bottom' }} />
+          <EditIcon sx={{ mr: 1, verticalAlign: 'bottom' }} />
           Edit Recipe
         </Typography>
 
@@ -372,7 +379,7 @@ const EditRecipePage = () => {
             />
           </Grid>
 
-          <Grid item xs={12}>
+          <Grid item xs={12} sm={6}>
             <TextField
               fullWidth
               label="Image URL"
@@ -380,21 +387,20 @@ const EditRecipePage = () => {
               value={formData.image}
               onChange={handleChange}
               InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
+                endAdornment: (
+                  <InputAdornment position="end">
                     <PhotoCamera />
                   </InputAdornment>
-                ),
+                )
               }}
-              helperText="Provide a URL to an image of your dish (optional)"
             />
           </Grid>
 
-          <Grid item xs={12} sm={4}>
+          <Grid item xs={12} sm={6}>
             <TextField
               fullWidth
-              type="number"
               label="Servings"
+              type="number"
               value={formData.servings}
               onChange={(e) => handleNumberChange('servings', e.target.value)}
               InputProps={{
@@ -402,53 +408,23 @@ const EditRecipePage = () => {
                   <InputAdornment position="start">
                     <Restaurant />
                   </InputAdornment>
-                ),
-                inputProps: { min: 1, max: 50 }
+                )
               }}
             />
           </Grid>
 
-          <Grid item xs={12} sm={4}>
-            <FormControl fullWidth>
-              <InputLabel>Difficulty</InputLabel>
-              <Select
-                name="difficulty"
-                value={formData.difficulty}
-                onChange={handleChange}
-                label="Difficulty"
-              >
-                {difficulties.map(diff => (
-                  <MenuItem key={diff.value} value={diff.value}>
-                    {diff.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Grid>
-
-          <Grid item xs={12} sm={4}>
-            <FormControl fullWidth>
-              <InputLabel>Category</InputLabel>
-              <Select
-                name="category"
-                value={formData.category}
-                onChange={handleChange}
-                label="Category"
-              >
-                {categories.map(cat => (
-                  <MenuItem key={cat.value} value={cat.value}>
-                    {cat.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+          {/* Time & Difficulty */}
+          <Grid item xs={12}>
+            <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
+              Time & Difficulty
+            </Typography>
           </Grid>
 
           <Grid item xs={12} sm={4}>
             <TextField
               fullWidth
-              type="number"
               label="Prep Time (min)"
+              type="number"
               value={formData.prepTime}
               onChange={(e) => handleNumberChange('prepTime', e.target.value)}
               InputProps={{
@@ -456,8 +432,7 @@ const EditRecipePage = () => {
                   <InputAdornment position="start">
                     <AccessTime />
                   </InputAdornment>
-                ),
-                inputProps: { min: 0, max: 1440 }
+                )
               }}
             />
           </Grid>
@@ -465,8 +440,8 @@ const EditRecipePage = () => {
           <Grid item xs={12} sm={4}>
             <TextField
               fullWidth
-              type="number"
               label="Cook Time (min)"
+              type="number"
               value={formData.cookTime}
               onChange={(e) => handleNumberChange('cookTime', e.target.value)}
               InputProps={{
@@ -474,8 +449,7 @@ const EditRecipePage = () => {
                   <InputAdornment position="start">
                     <AccessTime />
                   </InputAdornment>
-                ),
-                inputProps: { min: 0, max: 1440 }
+                )
               }}
             />
           </Grid>
@@ -483,17 +457,85 @@ const EditRecipePage = () => {
           <Grid item xs={12} sm={4}>
             <TextField
               fullWidth
-              type="number"
               label="Total Time (min)"
+              type="number"
               value={formData.totalTime}
-              disabled
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
                     <AccessTime />
                   </InputAdornment>
                 ),
+                readOnly: true
               }}
+            />
+          </Grid>
+
+          <Grid item xs={12} sm={6}>
+            <FormControl fullWidth>
+              <InputLabel>Difficulty</InputLabel>
+              <Select
+                name="difficulty"
+                value={formData.difficulty}
+                label="Difficulty"
+                onChange={handleChange}
+              >
+                {difficulties.map((d) => (
+                  <MenuItem key={d.value} value={d.value}>
+                    {d.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
+
+          <Grid item xs={12} sm={6}>
+            <FormControl fullWidth>
+              <InputLabel>Category</InputLabel>
+              <Select
+                name="category"
+                value={formData.category}
+                label="Category"
+                onChange={handleChange}
+              >
+                {categories.map((c) => (
+                  <MenuItem key={c.value} value={c.value}>
+                    {c.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
+
+          {/* Cuisine & Public */}
+          <Grid item xs={12} sm={6}>
+            <FormControl fullWidth>
+              <InputLabel>Cuisine</InputLabel>
+              <Select
+                name="cuisine"
+                value={formData.cuisine}
+                label="Cuisine"
+                onChange={handleChange}
+              >
+                {cuisines.map((c) => (
+                  <MenuItem key={c} value={c}>
+                    {c}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
+
+          <Grid item xs={12} sm={6}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={formData.isPublic}
+                  onChange={handleChange}
+                  name="isPublic"
+                />
+              }
+              label="Make this recipe public"
             />
           </Grid>
 
@@ -503,7 +545,7 @@ const EditRecipePage = () => {
               Ingredients
             </Typography>
             {formErrors.ingredients && (
-              <Alert severity="error" sx={{ mb: 2 }}>
+              <Alert severity="error" sx={{ mb: 1 }}>
                 {formErrors.ingredients}
               </Alert>
             )}
@@ -511,32 +553,36 @@ const EditRecipePage = () => {
 
           <Grid item xs={12}>
             {formData.ingredients.map((ingredient, index) => (
-              <Box key={index} sx={{ display: 'flex', mb: 2, alignItems: 'center' }}>
+              <Box
+                key={index}
+                sx={{
+                  display: 'flex',
+                  gap: 1,
+                  mb: 1,
+                  alignItems: 'center'
+                }}
+              >
                 <TextField
                   fullWidth
                   label={`Ingredient ${index + 1}`}
                   value={ingredient}
-                  onChange={(e) => handleIngredientChange(index, e.target.value)}
-                  placeholder="e.g., 2 cups all-purpose flour"
+                  onChange={(e) =>
+                    handleIngredientChange(index, e.target.value)
+                  }
                 />
-                {formData.ingredients.length > 1 && (
-                  <IconButton
-                    onClick={() => removeIngredient(index)}
-                    sx={{ ml: 1 }}
-                    color="error"
-                  >
-                    <Remove />
+                <IconButton
+                  onClick={() => removeIngredient(index)}
+                  disabled={formData.ingredients.length === 1}
+                >
+                  <Remove />
+                </IconButton>
+                {index === formData.ingredients.length - 1 && (
+                  <IconButton onClick={addIngredient}>
+                    <Add />
                   </IconButton>
                 )}
               </Box>
             ))}
-            <Button
-              startIcon={<Add />}
-              onClick={addIngredient}
-              variant="outlined"
-            >
-              Add Ingredient
-            </Button>
           </Grid>
 
           {/* Instructions */}
@@ -545,7 +591,7 @@ const EditRecipePage = () => {
               Instructions
             </Typography>
             {formErrors.instructions && (
-              <Alert severity="error" sx={{ mb: 2 }}>
+              <Alert severity="error" sx={{ mb: 1 }}>
                 {formErrors.instructions}
               </Alert>
             )}
@@ -553,103 +599,65 @@ const EditRecipePage = () => {
 
           <Grid item xs={12}>
             {formData.instructions.map((instruction, index) => (
-              <Box key={index} sx={{ mb: 2 }}>
-                <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
-                  <Typography
-                    variant="body1"
-                    sx={{
-                      minWidth: 70,
-                      mt: 1,
-                      fontWeight: 'bold',
-                      color: 'primary.main'
-                    }}
-                  >
-                    Step {index + 1}
-                  </Typography>
-                  <TextField
-                    fullWidth
-                    multiline
-                    rows={2}
-                    value={instruction}
-                    onChange={(e) => handleInstructionChange(index, e.target.value)}
-                    placeholder="Describe this step in detail..."
-                  />
-                  {formData.instructions.length > 1 && (
-                    <IconButton
-                      onClick={() => removeInstruction(index)}
-                      sx={{ ml: 1 }}
-                      color="error"
-                    >
-                      <Remove />
-                    </IconButton>
-                  )}
-                </Box>
+              <Box
+                key={index}
+                sx={{
+                  display: 'flex',
+                  gap: 1,
+                  mb: 1,
+                  alignItems: 'flex-start'
+                }}
+              >
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={2}
+                  label={`Step ${index + 1}`}
+                  value={instruction}
+                  onChange={(e) =>
+                    handleInstructionChange(index, e.target.value)
+                  }
+                />
+                <IconButton
+                  onClick={() => removeInstruction(index)}
+                  disabled={formData.instructions.length === 1}
+                >
+                  <Remove />
+                </IconButton>
+                {index === formData.instructions.length - 1 && (
+                  <IconButton onClick={addInstruction}>
+                    <Add />
+                  </IconButton>
+                )}
               </Box>
             ))}
-            <Button
-              startIcon={<Add />}
-              onClick={addInstruction}
-              variant="outlined"
-            >
-              Add Step
-            </Button>
           </Grid>
 
-          {/* Additional Details */}
+          {/* Tags & Notes */}
           <Grid item xs={12}>
             <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
-              Additional Details
+              Tags & Notes
             </Typography>
           </Grid>
 
           <Grid item xs={12}>
-            <FormControl fullWidth>
-              <InputLabel>Cuisine Type</InputLabel>
-              <Select
-                name="cuisine"
-                value={formData.cuisine}
-                onChange={handleChange}
-                label="Cuisine Type"
-              >
-                <MenuItem value="">None</MenuItem>
-                {cuisines.map(cuisine => (
-                  <MenuItem key={cuisine} value={cuisine}>
-                    {cuisine}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Grid>
-
-          <Grid item xs={12}>
-            <Typography variant="subtitle2" gutterBottom>
-              Tags (press Enter to add)
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+            <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
               <TextField
-                fullWidth
-                label="Add tag"
+                label="Add Tag"
                 value={tagInput}
                 onChange={(e) => setTagInput(e.target.value)}
                 onKeyPress={handleTagKeyPress}
-                placeholder="e.g., gluten-free, vegetarian, quick"
               />
-              <Button
-                onClick={handleAddTag}
-                sx={{ ml: 1 }}
-                variant="outlined"
-              >
-                Add
+              <Button variant="outlined" onClick={handleAddTag}>
+                Add Tag
               </Button>
             </Box>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
               {formData.tags.map((tag) => (
                 <Chip
                   key={tag}
                   label={tag}
                   onDelete={() => handleRemoveTag(tag)}
-                  color="primary"
-                  variant="outlined"
                 />
               ))}
             </Box>
@@ -660,45 +668,31 @@ const EditRecipePage = () => {
               fullWidth
               multiline
               rows={3}
-              label="Additional Notes"
+              label="Personal Notes"
               name="notes"
               value={formData.notes}
               onChange={handleChange}
-              placeholder="Any tips, variations, or special notes about this recipe..."
             />
           </Grid>
 
-          <Grid item xs={12}>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={formData.isPublic}
-                  onChange={handleChange}
-                  name="isPublic"
-                  color="primary"
-                />
-              }
-              label="Make this recipe public (visible to other users)"
-            />
-          </Grid>
-
-          {/* Action Buttons */}
-          <Grid item xs={12}>
-            <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
-              <Button
-                variant="contained"
-                onClick={handleSubmit}
-                disabled={saving}
-                startIcon={saving ? <CircularProgress size={20} /> : <Save />}
-              >
-                {saving ? 'Saving Changes...' : 'Save Changes'}
-              </Button>
+          {/* Buttons */}
+          <Grid item xs={12} sx={{ mt: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
               <Button
                 variant="outlined"
-                onClick={() => navigate('/profile')}
                 startIcon={<Cancel />}
+                onClick={() => navigate('/profile')}
+                disabled={saving}
               >
                 Cancel
+              </Button>
+              <Button
+                variant="contained"
+                startIcon={<Save />}
+                onClick={handleSubmit}
+                disabled={saving}
+              >
+                {saving ? 'Saving...' : 'Save Changes'}
               </Button>
             </Box>
           </Grid>

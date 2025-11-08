@@ -1,5 +1,5 @@
-// Custom Recipe Service for managing user's custom recipes
 // src/services/customRecipeService.js
+// Custom Recipe Service for managing user's custom recipes
 
 const API_URL = 'http://localhost:3001';
 
@@ -7,16 +7,21 @@ class CustomRecipeService {
   // Create a new custom recipe
   async createRecipe(userId, recipeData) {
     try {
-      // 确保 userId 是数字类型
-      const numericUserId = typeof userId === 'string' ? parseInt(userId, 10) : userId;
-      console.log('Creating recipe with userId:', numericUserId, 'Type:', typeof numericUserId);
+      // 统一把 userId 存成字符串，避免 "1" 和 1 不相等的问题
+      const stringUserId = String(userId);
+      console.log(
+        'Creating recipe with userId:',
+        stringUserId,
+        'Type:',
+        typeof stringUserId
+      );
 
       const newRecipe = {
         ...recipeData,
-        userId: numericUserId, // 使用数字类型的 userId
+        userId: stringUserId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-        id: Date.now() // Simple ID generation
+        id: Date.now() // 简单的 ID 生成
       };
 
       console.log('Recipe data to save:', newRecipe);
@@ -24,7 +29,7 @@ class CustomRecipeService {
       const response = await fetch(`${API_URL}/customRecipes`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(newRecipe)
       });
@@ -35,17 +40,17 @@ class CustomRecipeService {
 
       const recipe = await response.json();
       console.log('Recipe created successfully:', recipe);
-      
+
       return {
         success: true,
-        recipe: recipe,
+        recipe,
         message: 'Recipe created successfully!'
       };
     } catch (error) {
       console.error('Error creating recipe:', error);
       return {
         success: false,
-        message: 'Failed to create recipe'
+        message: error.message || 'Failed to create recipe'
       };
     }
   }
@@ -53,34 +58,39 @@ class CustomRecipeService {
   // Update an existing custom recipe
   async updateRecipe(recipeId, userId, updates) {
     try {
-      // 确保 userId 是数字类型
-      const numericUserId = typeof userId === 'string' ? parseInt(userId, 10) : userId;
-      
-      // First check if the recipe belongs to the user
-      const checkResponse = await fetch(`${API_URL}/customRecipes/${recipeId}`);
+      const stringUserId = String(userId);
+
+      // 先检查这道菜是不是当前用户的
+      const checkResponse = await fetch(
+        `${API_URL}/customRecipes/${recipeId}`
+      );
       if (!checkResponse.ok) {
         throw new Error('Recipe not found');
       }
-      
+
       const existingRecipe = await checkResponse.json();
-      
-      // 比较时也要确保类型一致
-      if (existingRecipe.userId !== numericUserId) {
-        console.error('Authorization failed:', existingRecipe.userId, '!==', numericUserId);
+
+      if (String(existingRecipe.userId) !== stringUserId) {
+        console.error(
+          'Authorization failed:',
+          existingRecipe.userId,
+          '!==',
+          stringUserId
+        );
         throw new Error('Unauthorized to edit this recipe');
       }
 
       const updatedRecipe = {
         ...existingRecipe,
         ...updates,
-        userId: numericUserId, // 保持 userId 为数字
+        userId: stringUserId,
         updatedAt: new Date().toISOString()
       };
 
       const response = await fetch(`${API_URL}/customRecipes/${recipeId}`, {
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(updatedRecipe)
       });
@@ -90,10 +100,10 @@ class CustomRecipeService {
       }
 
       const recipe = await response.json();
-      
+
       return {
         success: true,
-        recipe: recipe,
+        recipe,
         message: 'Recipe updated successfully!'
       };
     } catch (error) {
@@ -108,15 +118,16 @@ class CustomRecipeService {
   // Get all recipes for a specific user
   async getUserRecipes(userId) {
     try {
-      // 确保 userId 是数字类型
-      const numericUserId = typeof userId === 'string' ? parseInt(userId, 10) : userId;
-      console.log('Fetching recipes for userId:', numericUserId);
-      
-      const response = await fetch(`${API_URL}/customRecipes?userId=${numericUserId}`);
+      const stringUserId = String(userId);
+      console.log('Fetching recipes for userId:', stringUserId, 'Type: string');
+
+      const response = await fetch(
+        `${API_URL}/customRecipes?userId=${encodeURIComponent(stringUserId)}`
+      );
       if (!response.ok) {
         throw new Error('Failed to fetch recipes');
       }
-      
+
       const recipes = await response.json();
       console.log('Fetched recipes:', recipes);
       return recipes;
@@ -126,14 +137,29 @@ class CustomRecipeService {
     }
   }
 
-  // Get a single recipe by ID
+  // ❗ Get a single recipe by ID —— 改成用 ?id= 查询，避免 /:id 404 的问题
   async getRecipeById(recipeId) {
     try {
-      const response = await fetch(`${API_URL}/customRecipes/${recipeId}`);
+      const idString = String(recipeId).trim();
+      console.log('getRecipeById – querying with id:', idString);
+
+      // 不再用 /customRecipes/:id，而是用 ?id= 精确过滤
+      const response = await fetch(
+        `${API_URL}/customRecipes?id=${encodeURIComponent(idString)}`
+      );
+
       if (!response.ok) {
+        throw new Error('Failed to fetch recipe');
+      }
+
+      const data = await response.json();
+      console.log('getRecipeById – response data:', data);
+
+      if (!Array.isArray(data) || data.length === 0) {
         throw new Error('Recipe not found');
       }
-      return await response.json();
+
+      return data[0]; // 取第一条匹配的记录
     } catch (error) {
       console.error('Error fetching recipe:', error);
       return null;
@@ -143,17 +169,17 @@ class CustomRecipeService {
   // Delete a custom recipe
   async deleteRecipe(recipeId, userId) {
     try {
-      // 确保 userId 是数字类型
-      const numericUserId = typeof userId === 'string' ? parseInt(userId, 10) : userId;
-      
-      // First check if the recipe belongs to the user
-      const checkResponse = await fetch(`${API_URL}/customRecipes/${recipeId}`);
+      const stringUserId = String(userId);
+
+      const checkResponse = await fetch(
+        `${API_URL}/customRecipes/${recipeId}`
+      );
       if (!checkResponse.ok) {
         throw new Error('Recipe not found');
       }
-      
+
       const existingRecipe = await checkResponse.json();
-      if (existingRecipe.userId !== numericUserId) {
+      if (String(existingRecipe.userId) !== stringUserId) {
         throw new Error('Unauthorized to delete this recipe');
       }
 
@@ -195,18 +221,21 @@ class CustomRecipeService {
   // Search custom recipes
   async searchRecipes(userId, query) {
     try {
-      const numericUserId = typeof userId === 'string' ? parseInt(userId, 10) : userId;
-      const recipes = await this.getUserRecipes(numericUserId);
-      
-      return recipes.filter(recipe => 
+      const stringUserId = String(userId);
+      const recipes = await this.getUserRecipes(stringUserId);
+
+      return recipes.filter((recipe) =>
         recipe.title.toLowerCase().includes(query.toLowerCase()) ||
-        (recipe.description && recipe.description.toLowerCase().includes(query.toLowerCase())) ||
-        (recipe.ingredients && recipe.ingredients.some(ing => 
-          ing.toLowerCase().includes(query.toLowerCase())
-        )) ||
-        (recipe.tags && recipe.tags.some(tag => 
-          tag.toLowerCase().includes(query.toLowerCase())
-        ))
+        (recipe.description &&
+          recipe.description.toLowerCase().includes(query.toLowerCase())) ||
+        (recipe.ingredients &&
+          recipe.ingredients.some((ing) =>
+            ing.toLowerCase().includes(query.toLowerCase())
+          )) ||
+        (recipe.tags &&
+          recipe.tags.some((tag) =>
+            tag.toLowerCase().includes(query.toLowerCase())
+          ))
       );
     } catch (error) {
       console.error('Error searching recipes:', error);
