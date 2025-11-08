@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Card,
@@ -10,18 +10,40 @@ import {
   Chip,
   Box,
   IconButton,
-  Tooltip
+  Tooltip,
+  CircularProgress
 } from '@mui/material';
 import {
   AccessTime,
   Restaurant,
   FavoriteBorder,
+  Favorite,
   Share,
   Visibility
 } from '@mui/icons-material';
+import authService from '../../services/authService';
+import favoritesService from '../../services/favoritesService';
 
 const RecipeCard = ({ recipe, featured = false }) => {
   const navigate = useNavigate();
+  const [isFavorited, setIsFavorited] = useState(false);
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    checkUserAndFavorite();
+  }, [recipe.id]);
+
+  const checkUserAndFavorite = async () => {
+    const currentUser = authService.getCurrentUser();
+    setUser(currentUser);
+    
+    if (currentUser && recipe.id) {
+      // Check if recipe is favorited
+      const favorited = await favoritesService.isFavorited(currentUser.id, recipe.id);
+      setIsFavorited(!!favorited);
+    }
+  };
 
   const handleViewRecipe = () => {
     navigate(`/recipe/${recipe.id}`);
@@ -33,12 +55,38 @@ const RecipeCard = ({ recipe, featured = false }) => {
       navigator.share({
         title: recipe.title,
         text: `Check out this recipe: ${recipe.title}`,
-        url: window.location.href
+        url: `${window.location.origin}/recipe/${recipe.id}`
       });
     } else {
       // Fallback: Copy to clipboard
-      navigator.clipboard.writeText(window.location.href);
+      navigator.clipboard.writeText(`${window.location.origin}/recipe/${recipe.id}`);
       alert('Recipe link copied to clipboard!');
+    }
+  };
+
+  const handleFavoriteClick = async (e) => {
+    e.stopPropagation(); // Prevent card click event
+    
+    if (!user) {
+      // Redirect to login if not logged in
+      navigate('/login');
+      return;
+    }
+
+    setFavoriteLoading(true);
+    try {
+      const result = await favoritesService.toggleFavorite(user.id, recipe);
+      if (result.success) {
+        setIsFavorited(!isFavorited);
+        // Optional: Show a snackbar or toast notification
+        console.log(result.message);
+      } else {
+        console.error(result.message);
+      }
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+    } finally {
+      setFavoriteLoading(false);
     }
   };
 
@@ -140,9 +188,27 @@ const RecipeCard = ({ recipe, featured = false }) => {
           View Recipe
         </Button>
         <Box sx={{ ml: 'auto' }}>
-          <Tooltip title="Login to save favorites">
-            <IconButton size="small" disabled>
-              <FavoriteBorder />
+          <Tooltip title={
+            user 
+              ? (isFavorited ? "Remove from favorites" : "Add to favorites")
+              : "Login to save favorites"
+          }>
+            <IconButton 
+              size="small" 
+              onClick={handleFavoriteClick}
+              disabled={favoriteLoading}
+              sx={{ 
+                color: isFavorited ? 'error.main' : 'default',
+                '&:hover': {
+                  color: isFavorited ? 'error.dark' : 'error.light'
+                }
+              }}
+            >
+              {favoriteLoading ? (
+                <CircularProgress size={20} />
+              ) : (
+                isFavorited ? <Favorite /> : <FavoriteBorder />
+              )}
             </IconButton>
           </Tooltip>
           <IconButton size="small" onClick={handleShare}>

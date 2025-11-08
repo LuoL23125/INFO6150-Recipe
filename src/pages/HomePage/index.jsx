@@ -14,7 +14,7 @@ import {
 import { PersonAdd, Login } from '@mui/icons-material';
 import SearchBar from '../../components/SearchBar';
 import RecipeCard from '../../components/RecipeCard';
-import { recipeAPI, mockData, isAPIConfigured } from '../../utils/api';
+import { recipeAPI, isAPIConfigured } from '../../utils/api';
 
 const HomePage = () => {
   const navigate = useNavigate();

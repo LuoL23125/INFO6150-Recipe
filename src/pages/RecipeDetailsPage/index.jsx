@@ -34,13 +34,16 @@ import {
   Print,
   Share,
   FavoriteBorder,
+  Favorite,
   Login,
   LocalFireDepartment,
   Egg,
   Grain,
   WaterDrop
 } from '@mui/icons-material';
-import { recipeAPI, mockData, isAPIConfigured } from '../../utils/api';
+import { recipeAPI, isAPIConfigured } from '../../utils/api';
+import authService from '../../services/authService';
+import favoritesService from '../../services/favoritesService';
 
 const RecipeDetailsPage = () => {
   const { id } = useParams();
@@ -50,10 +53,25 @@ const RecipeDetailsPage = () => {
   const [error, setError] = useState(null);
   const [tabValue, setTabValue] = useState(0);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
+  const [isFavorited, setIsFavorited] = useState(false);
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
+  const [user, setUser] = useState(null);
 
   useEffect(() => {
     loadRecipeDetails();
+    checkUserAndFavorite();
   }, [id]);
+
+  const checkUserAndFavorite = async () => {
+    const currentUser = authService.getCurrentUser();
+    setUser(currentUser);
+    
+    if (currentUser) {
+      // Check if recipe is favorited
+      const favorited = await favoritesService.isFavorited(currentUser.id, id);
+      setIsFavorited(!!favorited);
+    }
+  };
 
   const loadRecipeDetails = async () => {
     setLoading(true);
@@ -92,8 +110,32 @@ const RecipeDetailsPage = () => {
     }
   };
 
-  const handleFavoriteClick = () => {
-    setShowLoginPrompt(true);
+  const handleFavoriteClick = async () => {
+    if (!user) {
+      setShowLoginPrompt(true);
+      return;
+    }
+
+    setFavoriteLoading(true);
+    try {
+      const result = await favoritesService.toggleFavorite(user.id, recipe);
+      if (result.success) {
+        setIsFavorited(!isFavorited);
+        // Show success message
+        if (!isFavorited) {
+          alert('Recipe added to favorites!');
+        } else {
+          alert('Recipe removed from favorites');
+        }
+      } else {
+        alert(result.message || 'Failed to update favorites');
+      }
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+      alert('Failed to update favorites');
+    } finally {
+      setFavoriteLoading(false);
+    }
   };
 
   if (loading) {
@@ -180,9 +222,13 @@ const RecipeDetailsPage = () => {
             />
             <Box sx={{ p: 2 }}>
               <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-                <Tooltip title="Login to save favorites">
-                  <IconButton onClick={handleFavoriteClick}>
-                    <FavoriteBorder />
+                <Tooltip title={user ? (isFavorited ? "Remove from favorites" : "Add to favorites") : "Login to save favorites"}>
+                  <IconButton 
+                    onClick={handleFavoriteClick}
+                    disabled={favoriteLoading}
+                    sx={{ color: isFavorited ? 'error.main' : 'default' }}
+                  >
+                    {isFavorited ? <Favorite /> : <FavoriteBorder />}
                   </IconButton>
                 </Tooltip>
                 <IconButton onClick={handleShare}>

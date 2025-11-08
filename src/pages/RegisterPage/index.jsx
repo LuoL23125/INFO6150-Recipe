@@ -7,9 +7,12 @@ import {
   Button,
   Typography,
   Box,
-  Link
+  Link,
+  Alert,
+  CircularProgress
 } from '@mui/material';
 import { PersonAdd } from '@mui/icons-material';
+import authService from '../../services/authService';
 
 const RegisterPage = () => {
   const navigate = useNavigate();
@@ -20,24 +23,87 @@ const RegisterPage = () => {
     password: '',
     confirmPassword: ''
   });
+  
+  const [errors, setErrors] = useState({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [apiError, setApiError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+
+  const validateForm = () => {
+    const newErrors = {};
+    
+    if (!formData.firstName.trim()) {
+      newErrors.firstName = 'First name is required';
+    }
+    
+    if (!formData.lastName.trim()) {
+      newErrors.lastName = 'Last name is required';
+    }
+    
+    if (!formData.email.trim()) {
+      newErrors.email = 'Email is required';
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      newErrors.email = 'Please enter a valid email';
+    }
+    
+    if (!formData.password) {
+      newErrors.password = 'Password is required';
+    } else if (formData.password.length < 6) {
+      newErrors.password = 'Password must be at least 6 characters';
+    }
+    
+    if (!formData.confirmPassword) {
+      newErrors.confirmPassword = 'Please confirm your password';
+    } else if (formData.password !== formData.confirmPassword) {
+      newErrors.confirmPassword = 'Passwords do not match';
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   const handleChange = (e) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value
     });
+    
+    // Clear error for this field
+    if (errors[e.target.name]) {
+      setErrors({
+        ...errors,
+        [e.target.name]: ''
+      });
+    }
+    setApiError('');
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-
-    // 简单验证
-    if (formData.password !== formData.confirmPassword) {
-      alert('两次输入的密码不一致');
+    
+    if (!validateForm()) {
       return;
     }
-
-    console.log('Registration attempt with:', formData);
+    
+    setIsLoading(true);
+    setApiError('');
+    
+    try {
+      const result = await authService.register(formData);
+      
+      if (result.success) {
+        setSuccessMessage('Registration successful! Redirecting...');
+        setTimeout(() => {
+          navigate('/');
+        }, 2000);
+      } else {
+        setApiError(result.message || 'Registration failed');
+      }
+    } catch (error) {
+      setApiError('An error occurred. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -66,6 +132,20 @@ const RegisterPage = () => {
             Sign Up
           </Typography>
 
+          {/* Success Message */}
+          {successMessage && (
+            <Alert severity="success" sx={{ width: '100%', mb: 2 }}>
+              {successMessage}
+            </Alert>
+          )}
+
+          {/* Error Message */}
+          {apiError && (
+            <Alert severity="error" sx={{ width: '100%', mb: 2 }}>
+              {apiError}
+            </Alert>
+          )}
+
           <Box
             component="form"
             onSubmit={handleSubmit}
@@ -81,16 +161,24 @@ const RegisterPage = () => {
               fullWidth
               label="First Name"
               name="firstName"
+              autoComplete="given-name"
               value={formData.firstName}
               onChange={handleChange}
+              error={!!errors.firstName}
+              helperText={errors.firstName}
+              disabled={isLoading}
             />
             <TextField
               required
               fullWidth
               label="Last Name"
               name="lastName"
+              autoComplete="family-name"
               value={formData.lastName}
               onChange={handleChange}
+              error={!!errors.lastName}
+              helperText={errors.lastName}
+              disabled={isLoading}
             />
             <TextField
               required
@@ -98,8 +186,12 @@ const RegisterPage = () => {
               label="Email Address"
               name="email"
               type="email"
+              autoComplete="email"
               value={formData.email}
               onChange={handleChange}
+              error={!!errors.email}
+              helperText={errors.email}
+              disabled={isLoading}
             />
             <TextField
               required
@@ -107,8 +199,12 @@ const RegisterPage = () => {
               label="Password"
               name="password"
               type="password"
+              autoComplete="new-password"
               value={formData.password}
               onChange={handleChange}
+              error={!!errors.password}
+              helperText={errors.password || 'At least 6 characters'}
+              disabled={isLoading}
             />
             <TextField
               required
@@ -116,22 +212,35 @@ const RegisterPage = () => {
               label="Confirm Password"
               name="confirmPassword"
               type="password"
+              autoComplete="new-password"
               value={formData.confirmPassword}
               onChange={handleChange}
+              error={!!errors.confirmPassword}
+              helperText={errors.confirmPassword}
+              disabled={isLoading}
             />
 
             <Button
               type="submit"
               fullWidth
               variant="contained"
+              disabled={isLoading}
               sx={{
                 mt: 1,
                 py: 1.5,
-                backgroundColor: '#2e7d32', // 深绿色
+                backgroundColor: '#2e7d32',
                 '&:hover': { backgroundColor: '#1b5e20' },
+                position: 'relative'
               }}
             >
-              SIGN UP
+              {isLoading ? (
+                <>
+                  <CircularProgress size={20} sx={{ color: 'white', mr: 1 }} />
+                  Creating Account...
+                </>
+              ) : (
+                'SIGN UP'
+              )}
             </Button>
 
             <Typography
@@ -149,6 +258,7 @@ const RegisterPage = () => {
                   navigate('/login');
                 }}
                 sx={{ color: '#2e7d32', fontWeight: 500 }}
+                disabled={isLoading}
               >
                 Sign In
               </Link>
