@@ -16,6 +16,7 @@ import DashboardPage from './pages/DashboardPage';
 import AddRecipePage from './pages/AddRecipePage';
 import EditRecipePage from './pages/EditRecipePage';
 import NotFoundPage from './pages/NotFoundPage';
+import AdvancedSearchPage from './pages/AdvancedSearchPage';
 
 import './App.css';
 
@@ -52,6 +53,7 @@ function App() {
               <Route path="/add-recipe" element={<AddRecipePage />} />
               <Route path="/edit-recipe/:id" element={<EditRecipePage />} />
               <Route path="*" element={<NotFoundPage />} />
+              <Route path="/advanced-search" element={<AdvancedSearchPage />} />
             </Routes>
           </Box>
         </Box>

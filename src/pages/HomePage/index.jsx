@@ -11,10 +11,11 @@ import {
   CircularProgress,
   Divider
 } from '@mui/material';
-import { PersonAdd, Login } from '@mui/icons-material';
+import { PersonAdd, Login, FilterList } from '@mui/icons-material';
 import SearchBar from '../../components/SearchBar';
 import RecipeCard from '../../components/RecipeCard';
 import { recipeAPI, isAPIConfigured } from '../../utils/api';
+import authService from '../../services/authService';
 
 const HomePage = () => {
   const navigate = useNavigate();
@@ -24,9 +25,14 @@ const HomePage = () => {
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showRegistrationPrompt, setShowRegistrationPrompt] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  // Load Recipe of the Day
+  // Check authentication and load Recipe of the Day
   useEffect(() => {
+    // Check if user is logged in
+    const user = authService.getCurrentUser();
+    setIsLoggedIn(!!user);
+    
     loadRecipeOfTheDay();
   }, []);
 
@@ -36,15 +42,25 @@ const HomePage = () => {
     try {
       if (isAPIConfigured()) {
         const recipe = await recipeAPI.getRandomRecipe();
-        setRecipeOfTheDay(recipe);
+        if (recipe) {
+          setRecipeOfTheDay(recipe);
+        } else {
+          setError('No recipes available. Please check your connection or try again later.');
+        }
       } else {
-        // Use mock data if API is not configured
-        setRecipeOfTheDay(mockData.randomRecipe);
-        setError('Using demo data. Configure your Spoonacular API key in utils/api.js for real recipes.');
+        // Try to load from cached recipes
+        const cachedRecipes = await recipeAPI.getCachedRecipes();
+        if (cachedRecipes && cachedRecipes.length > 0) {
+          // Use a random cached recipe as recipe of the day
+          const randomIndex = Math.floor(Math.random() * cachedRecipes.length);
+          setRecipeOfTheDay(cachedRecipes[randomIndex]);
+        } else {
+          setError('Configure your Spoonacular API key in utils/api.js for real recipes.');
+        }
       }
     } catch (err) {
       setError('Failed to load Recipe of the Day');
-      setRecipeOfTheDay(mockData.randomRecipe);
+      console.error('Error loading recipe of the day:', err);
     } finally {
       setLoading(false);
     }
@@ -64,15 +80,22 @@ const HomePage = () => {
     try {
       if (isAPIConfigured()) {
         const results = await recipeAPI.searchRecipes(query);
-        setSearchResults(results);
+        setSearchResults(results || []);
+        if (!results || results.length === 0) {
+          setError('No recipes found. Try a different search term.');
+        }
       } else {
-        // Use mock data if API is not configured
-        setSearchResults(mockData.searchResults);
-        setError('Using demo data. Configure your Spoonacular API key for real search results.');
+        // Search in cached recipes
+        const cachedResults = await recipeAPI.getCachedRecipes(query);
+        setSearchResults(cachedResults || []);
+        if (!cachedResults || cachedResults.length === 0) {
+          setError('No cached recipes found. Configure your Spoonacular API key for more results.');
+        }
       }
     } catch (err) {
       setError('Failed to search recipes');
-      setSearchResults(mockData.searchResults);
+      setSearchResults([]);
+      console.error('Search error:', err);
     } finally {
       setLoading(false);
     }
@@ -90,8 +113,8 @@ const HomePage = () => {
         </Typography>
       </Box>
 
-      {/* Registration Prompt */}
-      {showRegistrationPrompt && (
+      {/* Registration Prompt - Only show when not logged in */}
+      {!isLoggedIn && showRegistrationPrompt && (
         <Paper
           sx={{
             p: 3,
@@ -156,9 +179,21 @@ const HomePage = () => {
         </Paper>
       )}
 
-      {/* Search Bar */}
+      {/* Search Bar with Advanced Search Button */}
       <Box sx={{ mb: 4 }}>
         <SearchBar onSearch={handleSearch} />
+        {isLoggedIn && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+            <Button
+              variant="outlined"
+              color="primary"
+              startIcon={<FilterList />}
+              onClick={() => navigate('/advanced-search')}
+            >
+              Advanced Search (Dietary Filters & More)
+            </Button>
+          </Box>
+        )}
       </Box>
 
       {/* Error Alert */}
@@ -199,11 +234,14 @@ const HomePage = () => {
 
       {searchQuery && <Divider sx={{ my: 4 }} />}
 
-      {/* Recipe of the Day */}
+      {/* Featured Recipe */}
       {!loading && recipeOfTheDay && (
         <Box sx={{ mb: 6 }}>
           <Typography variant="h4" gutterBottom>
-            {searchQuery ? 'Or Try Our Recipe of the Day' : 'Recipe of the Day'}
+            {searchQuery ? 'Or Try This Featured Recipe' : 'Featured Recipe'}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Refresh the page to discover a different recipe!
           </Typography>
           <Grid container spacing={3}>
             <Grid item xs={12} md={8} sx={{ mx: 'auto' }}>

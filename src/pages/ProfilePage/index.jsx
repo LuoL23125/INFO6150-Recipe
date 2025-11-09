@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Container,
   Paper,
@@ -51,6 +51,7 @@ import customRecipeService from '../../services/customRecipeService';
 
 const ProfilePage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [user, setUser] = useState(null);
   const [favorites, setFavorites] = useState([]);
   const [mealPlans, setMealPlans] = useState([]);
@@ -65,14 +66,18 @@ const ProfilePage = () => {
   const [itemToDelete, setItemToDelete] = useState(null);
 
   useEffect(() => {
+    // Check if we should show a specific tab
+    if (location.state?.showTab === 'favorites') {
+      setTabValue(1); // Favorites is now at index 1
+    }
     loadUserData();
-  }, []);
+  }, [location.state]);
 
   const loadUserData = async () => {
     setLoading(true);
     try {
       const currentUser = authService.getCurrentUser();
-      console.log('Current user:', currentUser); // 调试日志
+      console.log('Current user:', currentUser);
       
       if (!currentUser) {
         navigate('/login');
@@ -86,16 +91,15 @@ const ProfilePage = () => {
         email: currentUser.email
       });
 
-      // 使用正确的用户ID
       const userId = currentUser.id;
-      console.log('Using userId for queries:', userId, 'Type:', typeof userId); // 调试日志
+      console.log('Using userId for queries:', userId, 'Type:', typeof userId);
 
+      // Load user's custom recipes
+      await loadCustomRecipes(userId);
       // Load user's favorites
       await loadFavorites(userId);
       // Load user's meal plans
       await loadMealPlans(userId);
-      // Load user's custom recipes
-      await loadCustomRecipes(userId);
 
     } catch (err) {
       setError('Failed to load profile data');
@@ -131,11 +135,10 @@ const ProfilePage = () => {
 
   const loadCustomRecipes = async (userId) => {
     try {
-      console.log('Loading custom recipes for userId:', userId, 'Type:', typeof userId); // 调试日志
+      console.log('Loading custom recipes for userId:', userId, 'Type:', typeof userId);
       
-      // 使用 customRecipeService 来加载食谱
       const recipes = await customRecipeService.getUserRecipes(userId);
-      console.log('Custom recipes loaded:', recipes); // 调试日志
+      console.log('Custom recipes loaded:', recipes);
       setCustomRecipes(recipes);
     } catch (err) {
       console.error('Error loading custom recipes:', err);
@@ -144,7 +147,6 @@ const ProfilePage = () => {
 
   const handleEditToggle = () => {
     if (editMode) {
-      // Cancel editing
       setEditedUser({
         firstName: user.firstName,
         lastName: user.lastName,
@@ -399,6 +401,14 @@ const ProfilePage = () => {
           <Grid container spacing={3} textAlign="center">
             <Grid item xs={4}>
               <Typography variant="h5" color="primary">
+                {customRecipes.length}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                My Recipes
+              </Typography>
+            </Grid>
+            <Grid item xs={4}>
+              <Typography variant="h5" color="primary">
                 {favorites.length}
               </Typography>
               <Typography variant="body2" color="text.secondary">
@@ -413,19 +423,11 @@ const ProfilePage = () => {
                 Meal Plans
               </Typography>
             </Grid>
-            <Grid item xs={4}>
-              <Typography variant="h5" color="primary">
-                {customRecipes.length}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Custom Recipes
-              </Typography>
-            </Grid>
           </Grid>
         </Box>
       </Paper>
 
-      {/* Content Tabs */}
+      {/* Content Tabs - 调整顺序：My Recipes 优先 */}
       <Paper sx={{ width: '100%' }}>
         <Tabs
           value={tabValue}
@@ -434,151 +436,16 @@ const ProfilePage = () => {
           textColor="primary"
           variant="fullWidth"
         >
+          <Tab label={`My Recipes (${customRecipes.length})`} icon={<Restaurant />} />
           <Tab label={`Favorites (${favorites.length})`} icon={<Favorite />} />
           <Tab label={`Meal Plans (${mealPlans.length})`} icon={<CalendarMonth />} />
-          <Tab label={`My Recipes (${customRecipes.length})`} icon={<Restaurant />} />
         </Tabs>
 
         <Box sx={{ p: 3, minHeight: 400 }}>
-          {/* Favorites Tab */}
+          {/* My Recipes Tab - 现在是第一个 (tabValue === 0) */}
           {tabValue === 0 && (
             <Grid container spacing={3}>
-              {favorites.length > 0 ? (
-                favorites.map((favorite) => (
-                  <Grid item xs={12} sm={6} md={4} key={favorite.id}>
-                    <Card>
-                      <CardMedia
-                        component="img"
-                        height="200"
-                        image={favorite.image || 'https://via.placeholder.com/300x200'}
-                        alt={favorite.title}
-                      />
-                      <CardContent>
-                        <Typography variant="h6" gutterBottom noWrap>
-                          {favorite.title}
-                        </Typography>
-                        {favorite.readyInMinutes && (
-                          <Chip
-                            icon={<AccessTime />}
-                            label={`${favorite.readyInMinutes} min`}
-                            size="small"
-                            sx={{ mr: 1 }}
-                          />
-                        )}
-                        {favorite.servings && (
-                          <Chip
-                            icon={<Restaurant />}
-                            label={`${favorite.servings} servings`}
-                            size="small"
-                          />
-                        )}
-                      </CardContent>
-                      <CardActions>
-                        <Button
-                          size="small"
-                          startIcon={<Visibility />}
-                          onClick={() => navigate(`/recipe/${favorite.recipeId}`)}
-                        >
-                          View
-                        </Button>
-                        <Button
-                          size="small"
-                          color="error"
-                          startIcon={<Delete />}
-                          onClick={() => handleDeleteClick('favorite', favorite)}
-                        >
-                          Remove
-                        </Button>
-                      </CardActions>
-                    </Card>
-                  </Grid>
-                ))
-              ) : (
-                <Grid item xs={12}>
-                  <Box sx={{ textAlign: 'center', py: 5 }}>
-                    <FavoriteBorder sx={{ fontSize: 60, color: 'text.secondary' }} />
-                    <Typography variant="h6" color="text.secondary" sx={{ mt: 2 }}>
-                      No favorites yet
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Start exploring recipes and save your favorites!
-                    </Typography>
-                    <Button
-                      variant="contained"
-                      sx={{ mt: 3 }}
-                      onClick={() => navigate('/')}
-                    >
-                      Explore Recipes
-                    </Button>
-                  </Box>
-                </Grid>
-              )}
-            </Grid>
-          )}
-
-          {/* Meal Plans Tab */}
-          {tabValue === 1 && (
-            <Box>
-              {mealPlans.length > 0 ? (
-                <List>
-                  {mealPlans.map((plan, index) => (
-                    <React.Fragment key={plan.id}>
-                      <ListItem>
-                        <ListItemAvatar>
-                          <Avatar sx={{ bgcolor: 'primary.main' }}>
-                            <CalendarMonth />
-                          </Avatar>
-                        </ListItemAvatar>
-                        <ListItemText
-                          primary={plan.name}
-                          secondary={`Week of ${plan.week} • ${Object.keys(plan.planData || {}).length} days planned`}
-                        />
-                        <ListItemSecondaryAction>
-                          <Button
-                            size="small"
-                            sx={{ mr: 1 }}
-                            onClick={() => console.log('View meal plan:', plan.id)}
-                          >
-                            View
-                          </Button>
-                          <IconButton
-                            edge="end"
-                            color="error"
-                            onClick={() => handleDeleteClick('mealPlan', plan)}
-                          >
-                            <Delete />
-                          </IconButton>
-                        </ListItemSecondaryAction>
-                      </ListItem>
-                      {index < mealPlans.length - 1 && <Divider variant="inset" component="li" />}
-                    </React.Fragment>
-                  ))}
-                </List>
-              ) : (
-                <Box sx={{ textAlign: 'center', py: 5 }}>
-                  <CalendarMonth sx={{ fontSize: 60, color: 'text.secondary' }} />
-                  <Typography variant="h6" color="text.secondary" sx={{ mt: 2 }}>
-                    No meal plans yet
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Create your first meal plan to get organized!
-                  </Typography>
-                  <Button
-                    variant="contained"
-                    sx={{ mt: 3 }}
-                    onClick={() => console.log('Create meal plan')}
-                  >
-                    Create Meal Plan
-                  </Button>
-                </Box>
-              )}
-            </Box>
-          )}
-
-          {/* Custom Recipes Tab */}
-          {tabValue === 2 && (
-            <Grid container spacing={3}>
-              {/* Add Recipe Button - 添加在顶部 */}
+              {/* Add Recipe Button */}
               <Grid item xs={12}>
                 <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
                   <Button
@@ -689,6 +556,141 @@ const ProfilePage = () => {
                 </Grid>
               )}
             </Grid>
+          )}
+
+          {/* Favorites Tab - 现在是第二个 (tabValue === 1) */}
+          {tabValue === 1 && (
+            <Grid container spacing={3}>
+              {favorites.length > 0 ? (
+                favorites.map((favorite) => (
+                  <Grid item xs={12} sm={6} md={4} key={favorite.id}>
+                    <Card>
+                      <CardMedia
+                        component="img"
+                        height="200"
+                        image={favorite.image || 'https://via.placeholder.com/300x200'}
+                        alt={favorite.title}
+                      />
+                      <CardContent>
+                        <Typography variant="h6" gutterBottom noWrap>
+                          {favorite.title}
+                        </Typography>
+                        {favorite.readyInMinutes && (
+                          <Chip
+                            icon={<AccessTime />}
+                            label={`${favorite.readyInMinutes} min`}
+                            size="small"
+                            sx={{ mr: 1 }}
+                          />
+                        )}
+                        {favorite.servings && (
+                          <Chip
+                            icon={<Restaurant />}
+                            label={`${favorite.servings} servings`}
+                            size="small"
+                          />
+                        )}
+                      </CardContent>
+                      <CardActions>
+                        <Button
+                          size="small"
+                          startIcon={<Visibility />}
+                          onClick={() => navigate(`/recipe/${favorite.recipeId}`)}
+                        >
+                          View
+                        </Button>
+                        <Button
+                          size="small"
+                          color="error"
+                          startIcon={<Delete />}
+                          onClick={() => handleDeleteClick('favorite', favorite)}
+                        >
+                          Remove
+                        </Button>
+                      </CardActions>
+                    </Card>
+                  </Grid>
+                ))
+              ) : (
+                <Grid item xs={12}>
+                  <Box sx={{ textAlign: 'center', py: 5 }}>
+                    <FavoriteBorder sx={{ fontSize: 60, color: 'text.secondary' }} />
+                    <Typography variant="h6" color="text.secondary" sx={{ mt: 2 }}>
+                      No favorites yet
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Start exploring recipes and save your favorites!
+                    </Typography>
+                    <Button
+                      variant="contained"
+                      sx={{ mt: 3 }}
+                      onClick={() => navigate('/')}
+                    >
+                      Explore Recipes
+                    </Button>
+                  </Box>
+                </Grid>
+              )}
+            </Grid>
+          )}
+
+          {/* Meal Plans Tab - 现在是第三个 (tabValue === 2) */}
+          {tabValue === 2 && (
+            <Box>
+              {mealPlans.length > 0 ? (
+                <List>
+                  {mealPlans.map((plan, index) => (
+                    <React.Fragment key={plan.id}>
+                      <ListItem>
+                        <ListItemAvatar>
+                          <Avatar sx={{ bgcolor: 'primary.main' }}>
+                            <CalendarMonth />
+                          </Avatar>
+                        </ListItemAvatar>
+                        <ListItemText
+                          primary={plan.name}
+                          secondary={`Week of ${plan.week} • ${Object.keys(plan.planData || {}).length} days planned`}
+                        />
+                        <ListItemSecondaryAction>
+                          <Button
+                            size="small"
+                            sx={{ mr: 1 }}
+                            onClick={() => console.log('View meal plan:', plan.id)}
+                          >
+                            View
+                          </Button>
+                          <IconButton
+                            edge="end"
+                            color="error"
+                            onClick={() => handleDeleteClick('mealPlan', plan)}
+                          >
+                            <Delete />
+                          </IconButton>
+                        </ListItemSecondaryAction>
+                      </ListItem>
+                      {index < mealPlans.length - 1 && <Divider variant="inset" component="li" />}
+                    </React.Fragment>
+                  ))}
+                </List>
+              ) : (
+                <Box sx={{ textAlign: 'center', py: 5 }}>
+                  <CalendarMonth sx={{ fontSize: 60, color: 'text.secondary' }} />
+                  <Typography variant="h6" color="text.secondary" sx={{ mt: 2 }}>
+                    No meal plans yet
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Create your first meal plan to get organized!
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    sx={{ mt: 3 }}
+                    onClick={() => console.log('Create meal plan')}
+                  >
+                    Create Meal Plan
+                  </Button>
+                </Box>
+              )}
+            </Box>
           )}
         </Box>
       </Paper>

@@ -88,7 +88,7 @@ const getCachedRecipes = async (query = '') => {
       const response = await fetch(url);
       const allRecipes = await response.json();
       return allRecipes.filter(recipe => 
-        recipe.title.toLowerCase().includes(query.toLowerCase())
+        recipe.title && recipe.title.toLowerCase().includes(query.toLowerCase())
       );
     }
     const response = await fetch(url);
@@ -101,17 +101,19 @@ const getCachedRecipes = async (query = '') => {
 
 // Enhanced Recipe API
 export const recipeAPI = {
-  // Get random recipe (Recipe of the Day)
-  getRandomRecipe: async (forceRefresh = false) => {
+  // Get random recipe (shows different recipe each refresh)
+  getRandomRecipe: async (alwaysRandom = true) => {
     try {
-      // Check if we have today's recipe cached
-      const today = new Date().toDateString();
-      const dailyResponse = await fetch(`${JSON_SERVER_URL}/dailyRecipes/1`);
-      const dailyData = await dailyResponse.json();
-      
-      if (!forceRefresh && dailyData.date === today && dailyData.recipe) {
-        console.log('Using cached Recipe of the Day');
-        return dailyData.recipe;
+      // If alwaysRandom is false, use the old daily cache behavior
+      if (!alwaysRandom) {
+        const today = new Date().toDateString();
+        const dailyResponse = await fetch(`${JSON_SERVER_URL}/dailyRecipes/1`);
+        const dailyData = await dailyResponse.json();
+        
+        if (dailyData.date === today && dailyData.recipe) {
+          console.log('Using cached Recipe of the Day');
+          return dailyData.recipe;
+        }
       }
 
       // Check API limit
@@ -129,39 +131,38 @@ export const recipeAPI = {
           // Cache the recipe
           await cacheRecipe(recipe);
           
-          // Update daily recipe
-          await fetch(`${JSON_SERVER_URL}/dailyRecipes/1`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              id: 1,
-              date: today,
-              recipe: recipe,
-              lastUpdated: new Date().toISOString()
-            })
-          });
-          
           await incrementAPIUsage();
           return recipe;
         }
       }
       
-      // Fallback to cached recipes
-      console.log('API limit reached or unavailable, using cached recipes');
+      // Fallback to cached recipes - get random one each time
+      console.log('Using random cached recipe');
       const cachedRecipes = await getCachedRecipes();
       if (cachedRecipes.length > 0) {
-        // Return a random cached recipe
-        const randomIndex = Math.floor(Math.random() * cachedRecipes.length);
-        return cachedRecipes[randomIndex];
+        // Filter out recipes with null values
+        const validRecipes = cachedRecipes.filter(recipe => 
+          recipe && recipe.id && recipe.title
+        );
+        
+        if (validRecipes.length > 0) {
+          // Return a different random cached recipe each time
+          const randomIndex = Math.floor(Math.random() * validRecipes.length);
+          return validRecipes[randomIndex];
+        }
       }
       
-      // Last resort: return mock data
-      return mockData.randomRecipe;
+      // If no cached recipes, return null
+      return null;
     } catch (error) {
       console.error('Error fetching random recipe:', error);
-      // Try to return cached recipe
+      // Try to return random cached recipe
       const cachedRecipes = await getCachedRecipes();
-      return cachedRecipes[0] || mockData.randomRecipe;
+      const validRecipes = cachedRecipes.filter(recipe => 
+        recipe && recipe.id && recipe.title
+      );
+      return validRecipes.length > 0 ? 
+        validRecipes[Math.floor(Math.random() * validRecipes.length)] : null;
     }
   },
 
@@ -224,15 +225,101 @@ export const recipeAPI = {
         }
       }
       
-      // If not found, return mock
-      return mockData.randomRecipe;
+      // If not found, return null
+      return null;
     } catch (error) {
       console.error('Error fetching recipe details:', error);
-      return mockData.randomRecipe;
+      return null;
     }
   },
 
-  // Get API usage statistics
+  // Advanced search with multiple filters
+  advancedSearch: async (params) => {
+    try {
+      const canUseAPI = await checkAPILimit() && API_KEY !== 'YOUR_SPOONACULAR_API_KEY';
+      
+      if (canUseAPI) {
+        // Build query string for Spoonacular complex search
+        let url = `${SPOONACULAR_URL}/complexSearch?apiKey=${API_KEY}&addRecipeInformation=true&addRecipeNutrition=true`;
+        
+        // Add all parameters to URL
+        Object.keys(params).forEach(key => {
+          if (params[key] && params[key] !== '') {
+            // Special handling for certain parameters
+            if (key === 'number') {
+              url += `&${key}=${params[key]}`;
+            } else if (key === 'diet' || key === 'intolerances') {
+              // These should be comma-separated strings
+              url += `&${key}=${params[key]}`;
+            } else {
+              url += `&${key}=${encodeURIComponent(params[key])}`;
+            }
+          }
+        });
+        
+        console.log('Advanced search URL:', url);
+        
+        const response = await fetch(url);
+        
+        if (response.ok) {
+          const data = await response.json();
+          
+          // Cache all results
+          for (const recipe of data.results) {
+            await cacheRecipe(recipe);
+          }
+          
+          await incrementAPIUsage();
+          return data.results;
+        }
+      }
+      
+      // Fallback to cached recipes with basic filtering
+      console.log('Advanced search using cached recipes');
+      const cachedRecipes = await getCachedRecipes();
+      
+      // Basic filtering on cached recipes
+      let filteredRecipes = cachedRecipes.filter(recipe => 
+        recipe && recipe.id && recipe.title
+      );
+      
+      // Filter by query if provided
+      if (params.query) {
+        filteredRecipes = filteredRecipes.filter(recipe =>
+          recipe.title.toLowerCase().includes(params.query.toLowerCase())
+        );
+      }
+      
+      // Filter by max ready time if provided
+      if (params.maxReadyTime) {
+        filteredRecipes = filteredRecipes.filter(recipe =>
+          recipe.readyInMinutes && recipe.readyInMinutes <= parseInt(params.maxReadyTime)
+        );
+      }
+      
+      // Filter by diets if provided (basic check in title/summary)
+      if (params.diet) {
+        const diets = params.diet.toLowerCase().split(',');
+        filteredRecipes = filteredRecipes.filter(recipe => {
+          const text = `${recipe.title} ${recipe.summary || ''}`.toLowerCase();
+          return diets.some(diet => {
+            if (diet === 'vegetarian') return recipe.vegetarian === true;
+            if (diet === 'vegan') return recipe.vegan === true;
+            if (diet === 'glutenfree') return recipe.glutenFree === true;
+            if (diet === 'dairyfree') return recipe.dairyFree === true;
+            return text.includes(diet);
+          });
+        });
+      }
+      
+      // Limit results
+      const limit = params.number || 12;
+      return filteredRecipes.slice(0, limit);
+    } catch (error) {
+      console.error('Error in advanced search:', error);
+      return [];
+    }
+  },
   getAPIUsageStats: async () => {
     try {
       const response = await fetch(`${JSON_SERVER_URL}/apiUsageStats`);
@@ -269,34 +356,6 @@ export const recipeAPI = {
     } catch (error) {
       console.error('Error clearing cache:', error);
       return { success: false };
-    }
-  }
-};
-
-// Mock data for development
-const mockData = {
-  randomRecipe: {
-    id: 1,
-    title: "Classic Spaghetti Carbonara",
-    readyInMinutes: 30,
-    servings: 4,
-    image: "https://via.placeholder.com/556x370",
-    summary: "A classic Italian pasta dish with eggs, cheese, and bacon.",
-    instructions: "<ol><li>Cook spaghetti according to package directions.</li><li>Meanwhile, cook bacon until crispy.</li><li>Beat eggs with cheese.</li><li>Drain pasta and mix with bacon.</li><li>Remove from heat and quickly stir in egg mixture.</li><li>Season with pepper and serve immediately.</li></ol>",
-    extendedIngredients: [
-      { id: 1, original: "400g spaghetti" },
-      { id: 2, original: "200g bacon, diced" },
-      { id: 3, original: "4 large eggs" },
-      { id: 4, original: "100g Parmesan cheese, grated" },
-      { id: 5, original: "Black pepper to taste" }
-    ],
-    nutrition: {
-      nutrients: [
-        { name: "Calories", amount: 450, unit: "kcal", percentOfDailyNeeds: 22.5 },
-        { name: "Protein", amount: 25, unit: "g", percentOfDailyNeeds: 50 },
-        { name: "Fat", amount: 18, unit: "g", percentOfDailyNeeds: 27.7 },
-        { name: "Carbohydrates", amount: 45, unit: "g", percentOfDailyNeeds: 15 }
-      ]
     }
   }
 };

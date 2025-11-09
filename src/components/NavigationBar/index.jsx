@@ -18,8 +18,7 @@ import {
   PersonAdd, 
   AccountCircle,
   Logout,
-  Favorite,
-  Dashboard
+  Favorite
 } from '@mui/icons-material';
 import authService from '../../services/authService';
 
@@ -61,12 +60,8 @@ const NavigationBar = () => {
 
   const handleFavorites = () => {
     handleMenuClose();
-    navigate('/favorites');
-  };
-
-  const handleDashboard = () => {
-    handleMenuClose();
-    navigate('/dashboard');
+    // Navigate to profile with state to show favorites tab
+    navigate('/profile', { state: { showTab: 'favorites' } });
   };
 
   // Get user initials for avatar
@@ -142,10 +137,6 @@ const NavigationBar = () => {
               <MenuItem onClick={handleProfile}>
                 <AccountCircle sx={{ mr: 1 }} />
                 Profile
-              </MenuItem>
-              <MenuItem onClick={handleDashboard}>
-                <Dashboard sx={{ mr: 1 }} />
-                Dashboard
               </MenuItem>
               <MenuItem onClick={handleFavorites}>
                 <Favorite sx={{ mr: 1 }} />
